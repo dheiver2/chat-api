@@ -1,73 +1,60 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List
-from gradio_client import Client
+from typing import List, Dict
+from huggingface_hub import InferenceClient
+
+token = "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"  # Substitua com o token que você obteve
+client = InferenceClient(api_key=token)
+TRANSLATIONS = {
+    "pt": {
+        "error_message": "Desculpe, ocorreu um erro: {}. Por favor, verifique sua conexão e configurações."
+    },
+}
 
 # Modelo de requisição com Pydantic
 class ChatRequest(BaseModel):
     message: str
-    system_message: str = "Você é um assistente útil."
-    chat_history: List[dict]
-    language: str = "pt"
-
-# Variáveis de tradução (simplificado para o exemplo)
-TRANSLATIONS = {
-    "pt": {
-        "error_message": "Desculpe, ocorreu um erro: {}. Por favor, verifique sua conexão e configurações."
-    }
-}
+    files: List[Dict[str, str]] = []  # Para suportar arquivos como imagens (exemplo simplificado)
 
 # Função para responder
 def respond(request: ChatRequest):
-    message = request.message
-    system_message = request.system_message
-    chat_history = request.chat_history
-    language = request.language
-    
-    # Verifica se a mensagem não está vazia
-    if not message.strip():
+    message = request.message.strip()
+    history = []
+    max_new_tokens = 256
+
+    if not message:
         return {"response": "Mensagem vazia, por favor, envie uma mensagem válida."}
-    
+
     try:
-        # Inicializa o cliente do modelo (ajuste conforme necessário)
-        client = Client("aifeifei798/feifei-chat")
-        
-        # Formatação da mensagem para incluir o histórico
-        formatted_message = f"{system_message}\n\nHistórico de conversa:\n"
-        
-        # # Adiciona o histórico anterior à mensagem formatada
-        for msg in chat_history:
-            formatted_message += f"{msg['role']}: {msg['content']}\n"
-        
-        formatted_message += f"Usuário: {message}"
-        
-        message_payload = {
-            "text": formatted_message,
-            "files": []
-        }
-        
-        # Envia a requisição para o modelo sem os parâmetros inválidos
-        response = client.predict(
-            message=message_payload,
-            feifei_select=True,
-            additional_dropdown="meta-llama/Llama-3.3-70B-Instruct",
-            image_mod="pixtral",
-            api_name="/chat"
-        )
-        
-        # Atualiza o histórico com a nova mensagem e a resposta do assistente
-        chat_history.append({"role": "user", "content": message})
-        chat_history.append({"role": "assistant", "content": response})
-        
-        # Retorna apenas a resposta do assistente
-        return {"response": response}
-        
+      model_id = "meta-llama/Llama-3.2-3B-Instruct"
+      
+      messages = history
+      messages.append({"role": "user", "content": message})
+
+      completion = client.chat.completions.create(
+        model=model_id, 
+        messages=messages,
+        max_tokens=150,
+        temperature=0.7,  # Reduzir a aleatoriedade
+        top_p=0.9  # Limitar a diversidade
+      )
+      print("Modelo carregado")
+      
+      response = completion.choices[0].message
+      # Remover as quebras de linha no conteúdo da resposta
+      response_content = response.content.replace('\n', ' ')  # Substituir \n por espaço (ou outro caractere)
+      messages.append({"role": response.role, "content": response_content})
+      print("Resposta gerada")
+      
+
+      return {"response": response_content, "history": history}
+    
     except Exception as e:
-        error_msg = TRANSLATIONS[language]["error_message"].format(str(e))
-        return {"response": error_msg}
+        error_message = TRANSLATIONS["pt"]["error_message"].format(str(e))
+        raise HTTPException(status_code=500, detail=error_message)
 
 # FastAPI App
-app = FastAPI()
+app = APIRouter()
 
 @app.post("/respond")
 def chat_respond(request: ChatRequest):

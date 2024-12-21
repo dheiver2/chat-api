@@ -15,7 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/chat", chat_app)
+app.include_router(chat_app, prefix="/chat")
 
 @app.get("/")
 def read_root():
