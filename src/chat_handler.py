@@ -15,13 +15,14 @@ TRANSLATIONS = {
 class ChatRequest(BaseModel):
     message: str
     files: List[Dict[str, str]] = []  # Para suportar arquivos como imagens (exemplo simplificado)
+    history: List[Dict[str, str]]
 
 # Função para responder
 def respond(request: ChatRequest):
     message = request.message.strip()
-    history = []
-    max_new_tokens = 256
+    history = request.history
 
+    print(history)
     if not message:
         return {"response": "Mensagem vazia, por favor, envie uma mensagem válida."}
 
@@ -31,10 +32,11 @@ def respond(request: ChatRequest):
       messages = history
       messages.append({"role": "user", "content": message})
 
+      print(messages)
       completion = client.chat.completions.create(
         model=model_id, 
         messages=messages,
-        max_tokens=150,
+        max_tokens=300,
         temperature=0.7,  # Reduzir a aleatoriedade
         top_p=0.9  # Limitar a diversidade
       )
